@@ -1,0 +1,11 @@
+{
+  "table": "customers_raw",
+  "columns": {
+    "customer_id": "Int32",
+    "customer_name": "String",
+    "country": "String",
+    "created_at": "Datetime"
+  },
+  "formats": {"created_at": "%Y-%m-%d %H:%M:%S"},
+  "csv_options": {"separator": ",", "has_header": true}
+}

@@ -1,0 +1,11 @@
+{
+  "table": "orders_raw",
+  "columns": {
+    "order_id": "Int64",
+    "customer_id": "Int32",
+    "order_date": "Date",
+    "amount": "Decimal(18,2)"
+  },
+  "formats": {"order_date": "%Y-%m-%d"},
+  "csv_options": {"separator": ",", "has_header": true}
+}

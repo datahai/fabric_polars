@@ -1,0 +1,44 @@
+name: deploy config to OneLake
+
+# Uploads config/ (schema files, silver rules, gold SQL) to the Lakehouses' Files.
+# Needs repository secrets AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_CLIENT_SECRET for a service
+# principal with Contributor (or higher) on the workspace, and a repository variable
+# FABRIC_WORKSPACE with the workspace name.
+
+on:
+  workflow_dispatch:
+    inputs:
+      workspace:
+        description: "Fabric workspace (defaults to the FABRIC_WORKSPACE variable)"
+        required: false
+      sample_data:
+        description: "Also upload the clean sample CSVs to landing"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: ["config/**"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: fabric          # optional: add approvals on this environment
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      WORKSPACE: ${{ inputs.workspace || vars.FABRIC_WORKSPACE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-deploy.txt
+      - name: Deploy
+        run: |
+          args=(--workspace "$WORKSPACE" \
+                --raw "${{ vars.RAW_LAKEHOUSE || 'ls_raw' }}" \
+                --silver "${{ vars.SILVER_LAKEHOUSE || 'ls_cleansed' }}" \
+                --gold "${{ vars.GOLD_LAKEHOUSE || 'ls_gold' }}")
+          if [ "${{ inputs.sample_data }}" = "true" ]; then args+=(--data sample); fi
+          python scripts/deploy_to_onelake.py "${args[@]}"

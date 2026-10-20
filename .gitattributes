@@ -1,0 +1,8 @@
+# Keep data files byte-for-byte (the dirty test CSVs deliberately use Windows line endings)
+*.csv -text
+*.json text eol=lf
+*.sql text eol=lf
+*.py text eol=lf
+*.ipynb text eol=lf
+*.md text eol=lf
+*.yml text eol=lf

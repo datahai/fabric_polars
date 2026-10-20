@@ -1,0 +1,171 @@
+product_id,product_name,unit_price
+1,Compact    Mug,390.58
+2,PREMIUM    kettle,317.05
+3,  classic    LAMP,355.69
+4,  classic    LAMP,436.19
+5,deluxe    LAMP,360.36
+6,  classic    kettle,389.05
+7,  classic      chair,255.55
+8,PREMIUM    desk ,215.37
+9,PREMIUM    kettle,59.63
+10,  classic    Mug,378.15
+11,Compact      chair,425.05
+12,  classic    LAMP,243.76
+13,  classic    desk ,417.19
+14,deluxe      chair,10.97
+15,deluxe      chair,142.45
+16,eco        chair,215.26
+17,  classic    LAMP,129.68
+18,  classic    LAMP,37.65
+19,deluxe    kettle,438.66
+20,  classic    LAMP,436.83
+21,  classic    Mug,274.90
+22,PREMIUM    kettle,230.52
+23,PREMIUM    desk ,24.12
+24,deluxe      chair,71.84
+25,PREMIUM      chair,43.72
+26,deluxe    Mug,265.73
+27,  classic    LAMP,42.16
+28,deluxe    kettle,405.12
+29,Compact      chair,411.07
+30,eco      desk ,444.72
+31,Compact    Mug,17.68
+32,  classic    LAMP,102.23
+33,  classic    kettle,346.50
+34,  classic    Mug,3.42
+35,  classic    desk ,248.90
+36,eco        chair,414.48
+37,Compact    Mug,361.30
+38,PREMIUM    desk ,46.72
+39,Compact    LAMP,300.63
+40,Compact    Mug,71.03
+41,PREMIUM      chair,275.16
+42,PREMIUM    Mug,93.70
+43,deluxe    desk ,199.34
+44,eco      kettle,101.22
+45,eco      LAMP,208.51
+46,PREMIUM    desk ,242.88
+47,Compact    desk ,447.19
+48,eco      Mug,33.87
+49,  classic      chair,367.21
+50,PREMIUM    Mug,65.30
+51,Compact    kettle,329.18
+52,PREMIUM    LAMP,342.17
+53,Compact      chair,129.77
+54,deluxe    LAMP,69.04
+55,deluxe      chair,6.51
+56,deluxe    LAMP,416.95
+57,Compact      chair,238.64
+58,Compact    kettle,376.21
+59,Compact    kettle,258.50
+60,deluxe    desk ,199.72
+61,eco      desk ,201.67
+62,deluxe    kettle,63.75
+63,Compact    LAMP,223.95
+64,deluxe      chair,235.45
+65,Compact      chair,242.80
+66,deluxe    kettle,305.00
+67,eco      kettle,266.04
+68,PREMIUM    kettle,247.00
+69,eco      desk ,159.76
+70,Compact    Mug,198.76
+71,PREMIUM      chair,7.85
+72,PREMIUM    LAMP,195.94
+73,PREMIUM    desk ,294.61
+74,Compact      chair,28.20
+75,  classic    kettle,373.20
+76,Compact    Mug,206.15
+77,  classic      chair,342.59
+78,PREMIUM    Mug,197.01
+79,Compact    desk ,40.77
+80,  classic    desk ,188.71
+81,Compact    desk ,-21.58
+82,  classic    Mug,50.65
+83,deluxe    Mug,89.09
+84,PREMIUM      chair,91.72
+85,Compact    desk ,348.06
+86,eco      Mug,283.24
+87,Compact    kettle,265.87
+88,eco      kettle,10.84
+89,deluxe    LAMP,441.44
+90,PREMIUM    Mug,345.01
+91,deluxe    Mug,268.65
+92,eco      kettle,246.53
+93,Compact      chair,146.19
+94,Compact      chair,94.79
+95,PREMIUM    LAMP,264.33
+96,  classic    LAMP,86.40
+97,deluxe    LAMP,315.79
+98,PREMIUM    kettle,194.01
+99,deluxe    desk ,41.42
+100,PREMIUM    desk ,24.44
+101,Compact      chair,321.25
+102,eco      kettle,218.25
+103,PREMIUM      chair,156.81
+104,  classic    desk ,317.05
+105,deluxe      chair,90.72
+106,PREMIUM    desk ,229.19
+107,eco      desk ,276.56
+108,eco      desk ,332.71
+109,eco      Mug,107.73
+110,Compact    Mug,190.64
+111,PREMIUM    LAMP,352.09
+112,Compact    desk ,227.31
+113,eco      LAMP,287.63
+114,Compact      chair,323.09
+115,eco      LAMP,24.59
+116,deluxe    kettle,46.02
+117,deluxe    kettle,-257.99
+118,eco      LAMP,359.24
+119,deluxe    desk ,172.48
+120,Compact    kettle,230.76
+121,  classic    Mug,437.19
+122,  classic    desk ,34.31
+123,eco      LAMP,225.71
+124,  classic      chair,314.84
+125,  classic    LAMP,448.08
+126,  classic    Mug,141.07
+127,eco        chair,222.16
+128,PREMIUM    LAMP,254.88
+129,eco      desk ,281.53
+130,Compact    LAMP,368.45
+131,  classic      chair,130.29
+132,Compact    Mug,293.25
+133,eco      desk ,415.61
+134,eco      Mug,344.51
+135,PREMIUM    kettle,-318.56
+136,deluxe    kettle,289.18
+137,eco      kettle,178.41
+138,eco      kettle,107.03
+139,eco        chair,442.14
+140,deluxe    LAMP,62.36
+141,eco      LAMP,442.14
+142,PREMIUM    desk ,354.94
+143,PREMIUM    LAMP,305.23
+144,PREMIUM    LAMP,106.31
+145,deluxe    Mug,143.52
+146,PREMIUM      chair,248.52
+147,deluxe    desk ,163.91
+148,Compact    kettle,224.39
+149,eco      Mug,431.03
+150,Compact    kettle,188.78
+71,deluxe desk ,69.27
+66,Compact desk ,137.35
+143,  classic LAMP,391.94
+132,eco     chair,95.60
+34,Compact LAMP,176.20
+89,PREMIUM desk ,274.25
+58,  classic   chair,199.93
+8,Compact kettle,81.33
+92,Compact   chair,223.41
+140,PREMIUM kettle,11.05
+97,  classic   chair,329.18
+31,PREMIUM desk ,137.33
+76,eco   kettle,20.82
+9,PREMIUM LAMP,318.43
+87,PREMIUM   chair,147.85
+103,Compact   chair,10.98
+57,Compact   chair,190.14
+113,deluxe   chair,304.64
+20,  classic kettle,33.87
+44,  classic   chair,349.93

@@ -1,0 +1,41 @@
+{
+  "tables": {
+    "customers_raw": {
+      "target_table": "customers",
+      "duplicates": {"keys": ["customer_id"], "keep": "latest"},
+      "cleanse": {
+        "customer_name": ["remove_control_chars", "trim", "collapse_spaces", "null_if_empty", "title_case"],
+        "country": ["trim", "collapse_spaces", "null_if_empty", "title_case",
+                    {"map": {"Uk": "United Kingdom", "U.K.": "United Kingdom", "Gb": "United Kingdom",
+                             "Usa": "United States", "Us": "United States", "U.S.": "United States"}}]
+      },
+      "allowed_values": {
+        "customer_name": {"allow_null": false, "on_fail": "reject"},
+        "country": {
+          "values": ["United Kingdom", "Ireland", "France", "Germany", "Netherlands", "Spain", "United States"],
+          "allow_null": true,
+          "on_fail": "reject"
+        }
+      }
+    },
+    "orders_raw": {
+      "target_table": "orders",
+      "duplicates": {"keys": ["order_id"], "keep": "latest"},
+      "allowed_values": {
+        "customer_id": {"allow_null": false, "on_fail": "reject"},
+        "order_date": {"min": "2020-01-01", "max": "2026-12-31", "on_fail": "reject"},
+        "amount": {"min": 0, "on_fail": "reject"}
+      }
+    },
+    "products_raw": {
+      "target_table": "products",
+      "duplicates": {"keys": ["product_id"], "keep": "latest"},
+      "cleanse": {
+        "product_name": ["trim", "collapse_spaces", "title_case"]
+      },
+      "allowed_values": {
+        "unit_price": {"min": 0, "on_fail": "null"}
+      }
+    }
+  }
+}

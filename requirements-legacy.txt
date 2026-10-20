@@ -1,0 +1,6 @@
+# An older, matched set (Polars 1.6 era) to make sure the notebooks still run on it
+polars==1.6.0
+deltalake==0.19.2
+duckdb==1.1.3
+pyarrow==26.0.0
+pytest>=8

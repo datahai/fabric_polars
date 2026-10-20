@@ -1,0 +1,10 @@
+{
+  "table": "products_raw",
+  "columns": {
+    "product_id": "Int32",
+    "product_name": "String",
+    "unit_price": "Decimal(18,2)"
+  },
+  "formats": {},
+  "csv_options": {"separator": ",", "has_header": true}
+}

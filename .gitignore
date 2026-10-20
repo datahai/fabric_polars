@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Notebook checkpoints and outputs
+.ipynb_checkpoints/
+
+# Large generated test data (GitHub rejects files over 100 MB; use notebooks/generate_test_csvs.ipynb)
+data/large/
+*_1gb*.csv
+*_100mb*.csv
+
+# Local test output
+onelake_mirror/
