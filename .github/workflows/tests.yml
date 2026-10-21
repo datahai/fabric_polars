@@ -7,12 +7,18 @@ on:
 
 jobs:
   pipeline:
-    name: pipeline (${{ matrix.libs }})
-    runs-on: ubuntu-latest
+    name: pipeline (${{ matrix.os }}, ${{ matrix.libs }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        libs: [current, legacy]
+        include:
+          - {os: ubuntu-latest, libs: current}
+          - {os: ubuntu-latest, libs: legacy}
+          - {os: windows-latest, libs: current}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,7 +31,14 @@ jobs:
           else
             pip install -r requirements.txt
           fi
+          pip install --no-deps -e .
+      - name: Notebooks are up to date with src/
+        run: python scripts/build_notebooks.py --check
       - name: Validate config files
         run: python scripts/deploy_to_onelake.py --local "$RUNNER_TEMP/onelake" --data sample --data dirty
-      - name: Run the notebooks end to end (local)
-        run: python -m pytest -q tests
+      - name: Run the pipeline with the medallion command
+        run: |
+          medallion init "$RUNNER_TEMP/lakehouses" --data sample
+          medallion run all --root "$RUNNER_TEMP/lakehouses" --quiet
+      - name: Tests (notebooks and engine, end to end)
+        run: python -m pytest -q

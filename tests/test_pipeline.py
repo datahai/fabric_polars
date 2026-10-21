@@ -1,7 +1,9 @@
 """End-to-end tests: landing CSVs -> bronze -> silver -> gold, run locally.
 
-The workspace is built once per module: config and the clean sample data are deployed,
+The workspace is built once per mode: config and the clean sample data are deployed,
 all three layers run, then the dirty data set is deployed and all three run again.
+Every test runs twice: through the generated notebooks, and through the engine directly
+(as the `medallion` command runs it).
 """
 import polars as pl
 import pytest
@@ -12,9 +14,9 @@ from fabric_local import LocalWorkspace
 TS = pl.Datetime("us", "UTC")
 
 
-@pytest.fixture(scope="module")
-def ws(tmp_path_factory):
-    w = LocalWorkspace(tmp_path_factory.mktemp("fabric"))
+@pytest.fixture(scope="module", params=["notebook", "engine"])
+def ws(request, tmp_path_factory):
+    w = LocalWorkspace(tmp_path_factory.mktemp(request.param), mode=request.param)
     w.deploy("sample")
     w.first = {nb: w.run(nb)[0] for nb in ("feed_loader", "bronze_to_silver", "silver_to_gold")}
     w.gold_v1 = {t: DeltaTable(w.table(w.gold, t)).version() for t in ("dim_customer", "fact_orders")}

@@ -1,0 +1,86 @@
+#%% markdown
+# Silver → Gold: dimensional model from SQL
+Python notebook (not PySpark). Each gold table is defined by one `.sql` file: a comment header with its settings, then a DuckDB `SELECT` over silver (and already-built gold) tables. The notebook runs the files in dependency order and loads the results.
+
+- **Dimensions**: integer surrogate keys (stable across runs), an `Unknown` member with key -1, and per-table history: `scd: 1` overwrites changes, `scd: 2` keeps versions with `valid_from` / `valid_to` / `is_current`.
+- **Facts**: merged on their business key (incremental, using `$watermark` in the SQL), or appended / overwritten.
+- `TABLES = ""` runs every SQL file; name tables to run only those. `DRY_RUN` runs the SQL and reports what would change without writing.
+
+The engine code below is generated from `src/medallion/` in the repository (the same code the `medallion` command runs on a PC). Change it there and run `python scripts/build_notebooks.py`, rather than editing it here.
+
+#%% markdown
+## Optional: pin library versions
+Uncomment to use specific versions (must run before anything imports them; adds start-up time).
+
+#%% code
+# %pip install -q "polars==2.0.0" "deltalake==1.6.6" "duckdb==1.5.6"
+
+#%% parameters gold.GoldParams
+
+#%% markdown
+## Engine
+Shared helpers and storage access. `FabricStorage` reads and writes OneLake with the notebook's identity.
+
+#%% engine common
+
+#%% engine storage
+
+#%% markdown
+## SQL files
+One file per gold table in `Files/<SQL_FOLDER>/`, e.g. `dim_customer.sql`. Settings go in `-- key: value` comment lines at the top; the rest is a DuckDB `SELECT`.
+
+```sql
+-- type: dimension
+-- business_key: customer_id
+-- surrogate_key: customer_sk
+-- scd: 2
+-- history_columns: country
+SELECT customer_id, customer_name, country
+FROM silver.customers
+```
+
+| Setting | For | Meaning |
+| --- | --- | --- |
+| `table` | both | Gold table name (default: the file name) |
+| `type` | both | `dimension` or `fact` (required) |
+| `business_key` | both | Column(s) that identify a row in the SQL result. Required for dimensions and for merged facts |
+| `surrogate_key` | dimension | Integer key column the notebook adds (default `<name>_sk`, e.g. `dim_customer` → `customer_sk`); `none` to use the business key only |
+| `scd` | dimension | `1` (default): changes overwrite. `2`: changes to `history_columns` close the current row and add a new version |
+| `history_columns` | dimension | With `scd: 2`, the columns whose changes create a new version (default: all). Changes to other columns update the current row |
+| `unknown_member` | dimension | `true` (default): adds a row with key -1 and `Unknown` text, for facts that don't match |
+| `load` | fact | `merge` (default with a business key), `append`, or `overwrite` (default without one) |
+| `depends_on` | both | Tables to build first. References to `gold.<table>` in the SQL are picked up automatically |
+
+In the SQL, silver tables are `silver.<table>` and gold tables `gold.<table>`. `$watermark` is the start of this table's last successful run (minus `WATERMARK_LOOKBACK_MINUTES`), or 1900-01-01 on the first run or a full reload, e.g. `WHERE o._silver_updated_utc > $watermark`.
+
+Adding a column to a dimension's SQL adds it to the table (keys and history kept; current rows filled in place). Removing one stops the run. For facts, a column change needs `FULL_RELOAD = True`.
+
+Fact SQL looks up surrogate keys itself, with `COALESCE(..., -1)` for no match. For SCD2 dimensions, join on the business key **and** the date: `ON d.customer_id = o.customer_id AND o.order_date >= d.valid_from AND o.order_date < d.valid_to`. Any `_sk` column left null stops the load.
+
+#%% engine gold
+
+#%% markdown
+## Run
+Tables run in dependency order. If a table fails, tables that depend on it are skipped. Each run adds one row per table to `LOG_TABLE`; the next run's `$watermark` comes from there. Dry runs aren't logged.
+
+#%% code
+params = GoldParams.from_mapping(globals())
+result = GoldRun(params, FabricStorage()).run()
+result.summary.select("table", "type", "status", "rows_in", "inserted", "updated", "new_versions", "unchanged",
+                      "seconds", "error")
+
+#%% markdown
+## Maintenance (optional)
+Merges rewrite files, so compact the gold tables periodically.
+
+#%% code
+RUN_MAINTENANCE = False
+
+if RUN_MAINTENANCE:
+    GoldRun(params, FabricStorage()).maintain()
+
+#%% code
+# Fail the run if any table failed (so a pipeline marks it failed)
+import notebookutils
+result.check()
+notebookutils.notebook.exit(result.exit_json())

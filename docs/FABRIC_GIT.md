@@ -12,7 +12,9 @@ Fabric can sync a workspace with a folder of a GitHub (or Azure DevOps) reposito
 Pick one as the source of truth:
 
 - **Notebooks edited in Fabric** (most teams): connect the workspace to `fabric/`, edit and commit in Fabric. Refresh `notebooks/` from Fabric when you want the local tests to cover your changes (download each notebook as `.ipynb`, or export it with the Fabric REST API).
-- **Notebooks edited locally**: keep `notebooks/` as the source, don't connect Git integration, and import the changed notebooks into Fabric (or automate that with the Fabric REST API's item definition endpoints).
+- **Code edited locally** (recommended now that the notebooks are generated): change `src/medallion/`, run `python scripts/build_notebooks.py`, and import the changed notebooks into Fabric (or automate that with the Fabric REST API's item definition endpoints). Don't connect Git integration to `notebooks/`.
+
+The engine cells of each notebook are generated from `src/medallion/`. If you edit them in Fabric, copy the change back into `src/` before the next regeneration, or it will be lost.
 
 ## Connect the workspace
 

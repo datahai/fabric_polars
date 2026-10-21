@@ -1,0 +1,73 @@
+#%% markdown
+# Feed loader – CSV → Delta (append)
+Python notebook (not PySpark). Loads one CSV per feed into its own Delta table in the Lakehouse, appending each run.
+
+**Per run:** find new CSV(s) in each feed's landing folder → read as text and cast to explicit types (Int32/Int64, Decimal(18,2), Date, UTC Datetime) → add audit columns → skip if this file was already loaded → append to Delta → move CSV to `archive/`.
+
+**Feeds are discovered**: every child folder of `LANDING_ROOT` is a feed, loaded into its own table, with column types from a `_schema.json` in the folder. Or pass one `FOLDER` (and optionally `TABLE`) to load a single location.
+
+Within a feed, files are loaded **one at a time**, so memory depends on the largest single file, not on how many files there are. Set `PARALLEL_FEEDS` above 1 to load several feeds at once in this same session (one thread per feed); `FEED_FILTER` limits a run to named feeds. A failure in one feed stops that feed only; the others carry on, and the run fails at the end so a pipeline sees it. Files at or above `STREAM_THRESHOLD_MB` are **streamed** (`scan_csv` → `sink_delta`) and never held in memory whole; smaller files are loaded in memory, which also gives an exact row count before the write. On Polars versions without `sink_delta`, large files fall back to an in-memory load (`stream-fallback` in the summary).
+
+Writes use row groups of up to `ROW_GROUP_ROWS` rows (8 million by default), which suits Power BI Direct Lake better than the ~1 million default. delta-rs can't apply V-Order; that needs Spark.
+
+The engine code below is generated from `src/medallion/` in the repository (the same code the `medallion` command runs on a PC). Change it there and run `python scripts/build_notebooks.py`, rather than editing it here.
+
+#%% markdown
+## Optional: pin library versions
+Fabric's preinstalled Polars may be older than 2.0. Older versions still load everything, but files at or above `STREAM_THRESHOLD_MB` are then read whole into memory instead of streamed (the run prints which you have). To get true streaming, uncomment the line below. It must run before anything imports Polars, and it adds start-up time to every run.
+
+#%% code
+# %pip install -q "polars==2.0.0" "deltalake==1.6.6"
+
+#%% parameters bronze.BronzeParams
+
+#%% markdown
+## Engine
+Shared helpers and storage access. `FabricStorage` reads and writes OneLake with the notebook's identity.
+
+#%% engine common
+
+#%% engine storage
+
+#%% markdown
+## Feed discovery and schema files
+Each child folder of `LANDING_ROOT` is a feed. Its table is named after the folder (`orders` → `orders_raw`) and loaded CSVs move to `ARCHIVE_ROOT/<folder>`. Column types come from a `_schema.json` file in the folder:
+
+```json
+{
+  "table": "orders_raw",
+  "columns": {"order_id": "Int64", "customer_id": "Int32", "order_date": "Date", "amount": "Decimal(18,2)"},
+  "formats": {"order_date": "%Y-%m-%d"},
+  "csv_options": {"separator": ",", "has_header": true}
+}
+```
+
+`columns` lists every CSV column in file order. Types: `String`, `Int8`–`Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Boolean`, `Date`, `Datetime` (stored as UTC, microseconds) and `Decimal(p,s)`. `Date` and `Datetime` columns need a format in `formats`. `table` and `csv_options` are optional.
+
+#%% engine bronze
+
+#%% markdown
+## Load
+Loads the feeds, then appends the results to the `LOG_TABLE` Delta table: one row per file (plus one per feed with no new files or no schema), with the run's ID, start and end times, where it ran from, and the library versions. Dry runs aren't logged. The log is written even when a feed failed, so failures are recorded too.
+
+#%% code
+params = BronzeParams.from_mapping(globals())
+result = BronzeRun(params, FabricStorage()).run()
+result.summary.select("feed", "file", "mode", "status", "rows", "started_utc", "seconds", "error")
+
+#%% markdown
+## Maintenance (optional)
+Appends add files every run. Compact periodically – e.g. run this cell weekly or after a large batch, or move it to its own scheduled notebook.
+
+#%% code
+RUN_MAINTENANCE = False
+
+if RUN_MAINTENANCE:
+    BronzeRun(params, FabricStorage()).maintain()
+
+#%% code
+# Fail the run if any feed (or the log write) failed, so a pipeline marks it failed;
+# otherwise return the summary with the run ID
+import notebookutils
+result.check()
+notebookutils.notebook.exit(result.exit_json())

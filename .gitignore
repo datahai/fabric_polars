@@ -1,6 +1,9 @@
 # Python
 __pycache__/
 *.pyc
+*.egg-info/
+build/
+dist/
 .pytest_cache/
 .venv/
 venv/
@@ -13,5 +16,6 @@ data/large/
 *_1gb*.csv
 *_100mb*.csv
 
-# Local test output
+# Local test output, and local Lakehouses if you keep them inside the repo
 onelake_mirror/
+lakehouses/

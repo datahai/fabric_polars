@@ -1,8 +1,8 @@
 """Run the Fabric notebooks locally against folders laid out like Lakehouses.
 
 A minimal stand-in for `notebookutils` is installed, each notebook's code cells are executed
-in order, the parameters cell is overridden, and the OneLake base paths are redirected to
-local folders. Nothing here talks to Fabric.
+in order, the parameters cell is overridden, and the notebook's storage is pointed at local
+folders. Nothing here talks to Fabric.
 """
 import json
 import os
@@ -14,6 +14,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 NOTEBOOKS = REPO / "notebooks"
+sys.path.insert(0, str(REPO / "src"))      # the engine, without needing `pip install -e .`
 
 
 class _FileInfo:
@@ -55,10 +56,14 @@ def install_notebookutils(notebook_name="local"):
 
 
 class LocalWorkspace:
-    """A folder per Lakehouse: <root>/<name>.Lakehouse/{Files,Tables/dbo}."""
+    """A folder per Lakehouse: <root>/<name>.Lakehouse/{Files,Tables/dbo}.
 
-    def __init__(self, root, raw="ls_raw", silver="ls_cleansed", gold="ls_gold"):
+    mode "notebook" runs the generated notebooks cell by cell; mode "engine" calls the
+    medallion package directly, as the `medallion` command does."""
+
+    def __init__(self, root, raw="ls_raw", silver="ls_cleansed", gold="ls_gold", mode="notebook"):
         self.root = Path(root)
+        self.mode = mode
         self.raw, self.silver, self.gold = raw, silver, gold
         for lh in (raw, silver, gold):
             (self.lakehouse(lh) / "Files").mkdir(parents=True, exist_ok=True)
@@ -78,13 +83,34 @@ class LocalWorkspace:
             cmd += ["--data", d]
         subprocess.run(cmd, check=True, capture_output=True)
 
-    # which notebook variables hold OneLake base paths, and which Lakehouse each should point at
-    def _bases(self):
-        return {"BASE": self.raw, "SOURCE_BASE": self.raw, "TARGET_BASE": self.silver,
-                "SILVER_BASE": self.silver, "GOLD_BASE": self.gold}
+    def lakehouse_params(self, notebook):
+        """The Lakehouse-name parameters that point a notebook at this workspace's Lakehouses."""
+        return {"feed_loader": {"LAKEHOUSE": self.raw},
+                "bronze_to_silver": {"SOURCE_LAKEHOUSE": self.raw, "TARGET_LAKEHOUSE": self.silver},
+                "silver_to_gold": {"SILVER_LAKEHOUSE": self.silver, "GOLD_LAKEHOUSE": self.gold}}[notebook]
 
     def run(self, notebook, **params):
-        """Execute a notebook's code cells. Returns (exit value or None, the notebook's globals)."""
+        """Run one layer by its notebook name. Returns (exit value, notebook globals or RunResult)."""
+        if self.mode == "engine":
+            return self.run_engine(notebook, **params)
+        return self.run_notebook(notebook, **params)
+
+    def run_engine(self, notebook, **params):
+        from medallion import LocalStorage, bronze, silver, gold
+        layer, cls, runner = {"feed_loader": (bronze, bronze.BronzeParams, bronze.BronzeRun),
+                              "bronze_to_silver": (silver, silver.SilverParams, silver.SilverRun),
+                              "silver_to_gold": (gold, gold.GoldParams, gold.GoldRun)}[notebook]
+        p = cls().updated(**{**self.lakehouse_params(notebook), **params})
+        result = runner(p, LocalStorage(self.root), log=lambda *_: None).run()
+        result.check()
+        return json.loads(result.exit_json()), result
+
+    def run_notebook(self, notebook, **params):
+        """Execute a notebook's code cells. Returns (exit value or None, the notebook's globals).
+
+        Once the engine's storage cell has run, FabricStorage is swapped for LocalStorage on this
+        workspace's folder, so the notebook reads and writes local Lakehouses instead of OneLake."""
+        params = {**self.lakehouse_params(notebook), **params}
         install_notebookutils(notebook)
         nb = json.loads((NOTEBOOKS / f"{notebook}.ipynb").read_text(encoding="utf-8"))
         g = {"__name__": "__notebook__"}
@@ -96,13 +122,13 @@ class LocalWorkspace:
                 src = cell["source"] if isinstance(cell["source"], str) else "".join(cell["source"])
                 exec(compile(src, f"{notebook}.ipynb", "exec"), g)
                 if "parameters" in cell.get("metadata", {}).get("tags", []):
+                    unknown = sorted(k for k in params if k not in g)
+                    if unknown:
+                        raise ValueError(f"{notebook} has no parameter(s) {unknown}")
                     g.update(params)
-                if not redirected and any(isinstance(g.get(v), str) and g[v].startswith("abfss://")
-                                          for v in self._bases()):
-                    for var, lh in self._bases().items():
-                        if isinstance(g.get(var), str) and g[var].startswith("abfss://"):
-                            g[var] = str(self.lakehouse(lh))
-                    g["storage_options"] = lambda: None
+                if not redirected and "FabricStorage" in g:
+                    local = g["LocalStorage"]
+                    g["FabricStorage"] = lambda: local(self.root)
                     redirected = True
         except NotebookExit as e:
             return json.loads(e.value), g

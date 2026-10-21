@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "medallion"
+version = "0.1.0"
+description = "Bronze/silver/gold pipeline with Polars, delta-rs and DuckDB, for Fabric notebooks or a PC"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "polars>=1.6",
+    "deltalake>=0.19",
+    "duckdb>=1.1",
+    "pyarrow>=15",
+]
+
+[project.optional-dependencies]
+onelake = ["azure-identity", "azure-storage-file-datalake"]
+test = ["pytest>=8"]
+
+[project.scripts]
+medallion = "medallion.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

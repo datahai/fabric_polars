@@ -1,0 +1,85 @@
+#%% markdown
+# Bronze → Silver: cleanse raw tables
+Python notebook (not PySpark). Reads raw (bronze) Delta tables, applies the rules in a JSON rules file, and writes cleansed (silver) tables.
+
+**Per table, per run:** read bronze rows from source files not yet processed, in batches of about `BATCH_ROWS` rows (oldest files first) → cleanse columns → check allowed values (failures rejected, nulled or defaulted) → remove duplicates on the key columns → merge into the silver table (insert new keys, update existing), one commit per batch → record rejected rows, processed files and a run log.
+
+- `TABLES = ""` processes every table in the rules file; name one or more to process only those.
+- Runs are incremental: each bronze `_source_file` is processed once. `FULL_RELOAD = True` rebuilds silver tables from all bronze rows.
+- Rejected rows go to `silver_rejects` with the reason and the original bronze row as JSON.
+
+The engine code below is generated from `src/medallion/` in the repository (the same code the `medallion` command runs on a PC). Change it there and run `python scripts/build_notebooks.py`, rather than editing it here.
+
+#%% markdown
+## Optional: pin library versions
+Uncomment to use specific versions (must run before anything imports Polars; adds start-up time). Pin both packages together.
+
+#%% code
+# %pip install -q "polars==2.0.0" "deltalake==1.6.6"
+
+#%% parameters silver.SilverParams
+
+#%% markdown
+## Engine
+Shared helpers and storage access. `FabricStorage` reads and writes OneLake with the notebook's identity.
+
+#%% engine common
+
+#%% engine storage
+
+#%% markdown
+## Rules file
+One JSON file (`RULES_FILE`, in the target Lakehouse's Files) with an entry per bronze table:
+
+```json
+{
+  "tables": {
+    "customers_raw": {
+      "target_table": "customers",
+      "duplicates": {"keys": ["customer_id"], "keep": "latest"},
+      "cleanse": {
+        "customer_name": ["trim", "collapse_spaces", "title_case"],
+        "country": ["trim", {"map": {"UK": "United Kingdom", "USA": "United States"}}]
+      },
+      "allowed_values": {
+        "country": {"values": ["United Kingdom", "Ireland", "France"], "on_fail": "reject"},
+        "customer_name": {"allow_null": false, "on_fail": "reject"}
+      }
+    }
+  }
+}
+```
+
+- **target_table**: optional; default is the bronze name without `_raw`.
+- **duplicates**: `keys` = column(s) that identify a row. `keep`: `latest` (newest bronze load wins, and updates the silver row), `first` (the first version is kept; later ones are ignored) or `reject` (keys repeated within a batch are all rejected). Rows with a null key are rejected. Without `duplicates`, rows are appended.
+- **cleanse**: rules applied in order. Text: `trim`, `upper`, `lower`, `title_case`, `collapse_spaces`, `remove_control_chars`, `null_if_empty`, `{"replace": {"pattern": "regex", "with": "text"}}`, `{"map": {"from": "to"}}`. Numbers: `abs`, `{"round": 2}`. Any type: `{"fill_null": value}`.
+- **allowed_values**: per column, any of `values` (list), `min`, `max`, `allow_null` (default true), `ignore_case` (text, default false). `on_fail`: `reject` (row goes to the rejects table), `null`, or `default` (with `"default": value`). Checked after cleansing.
+
+#%% engine silver
+
+#%% markdown
+## Run
+Processes the tables, then records rejects, processed files and the run log, in one commit each, after all tables finish. Nothing from a failed table is marked as processed, so its files are picked up again next run. Dry runs write nothing.
+
+#%% code
+params = SilverParams.from_mapping(globals())
+result = SilverRun(params, FabricStorage()).run()
+result.summary.select("source_table", "target_table", "status", "files", "rows_read", "rows_rejected",
+                      "duplicates_removed", "rows_out", "rows_inserted", "rows_updated", "rows_appended",
+                      "seconds", "error")
+
+#%% markdown
+## Maintenance (optional)
+Merges rewrite files, so compact the silver tables periodically.
+
+#%% code
+RUN_MAINTENANCE = False
+
+if RUN_MAINTENANCE:
+    SilverRun(params, FabricStorage()).maintain()
+
+#%% code
+# Fail the run if any table (or a record write) failed, so a pipeline marks it failed
+import notebookutils
+result.check()
+notebookutils.notebook.exit(result.exit_json())

@@ -30,7 +30,9 @@ flowchart TB
 
 Polars reads and transforms data in bronze and silver, DuckDB runs the gold SQL, and delta-rs (the `deltalake` package) writes every Delta table. Everything runs on the Python notebook's single node (2 vCores and 16 GB by default).
 
-Contents: [Setup](#setup) · [Bronze](#bronze-landing-csvs-to-raw-tables) · [Silver](#silver-cleansing-with-a-rules-file) · [Gold](#gold-dimensional-model-from-sql) · [Pipeline orchestration](#pipeline-orchestration) · [Operations](#operations) · [Sizing, limits and troubleshooting](#sizing-limits-and-troubleshooting)
+The same engine also runs on a PC with the `medallion` command, against local folders laid out like Lakehouses. See [Running on your PC](#running-on-your-pc).
+
+Contents: [Setup](#setup) · [Bronze](#bronze-landing-csvs-to-raw-tables) · [Silver](#silver-cleansing-with-a-rules-file) · [Gold](#gold-dimensional-model-from-sql) · [Pipeline orchestration](#pipeline-orchestration) · [Operations](#operations) · [Sizing, limits and troubleshooting](#sizing-limits-and-troubleshooting) · [Running on your PC](#running-on-your-pc) · [Changing the engine](#changing-the-engine)
 
 ---
 
@@ -84,7 +86,7 @@ Names are typed as they appear in Fabric; spaces are encoded for you. For Lakeho
 4. Run `silver_to_gold` the same way.
 5. Deploy with `--data dirty` and repeat steps 2 to 4 to see rejects, duplicates, SCD2 versions and incremental fact loads.
 
-Each notebook's first code cell prints the Polars, deltalake and DuckDB versions it found. Fabric Environments can't be attached to Python notebooks, so the optional `%pip install` cell at the top of each notebook is the way to pin versions. Pin Polars and deltalake together: mismatched eras fail on write.
+Each notebook's run cell prints the Polars, deltalake and DuckDB versions it found. Fabric Environments can't be attached to Python notebooks, so the optional `%pip install` cell at the top of each notebook is the way to pin versions. Pin Polars and deltalake together: mismatched eras fail on write.
 
 ---
 
@@ -358,7 +360,7 @@ ORDER BY rejects DESC;
 | Rebuild facts (e.g. late-arriving customers) | Gold with `TABLES` = the fact and `FULL_RELOAD = True` |
 | Remove a dimension column | Delete the gold table and run gold; keys are reassigned, so reload dependent facts |
 
-**Maintenance.** Bronze and silver notebooks end with a maintenance cell (`RUN_MAINTENANCE = True`) that compacts and vacuums (7-day retention). For gold, use the Lakehouse's table maintenance or `DeltaTable(path).optimize.compact()` and `.vacuum(retention_hours=168)`. delta-rs can't write V-Order; run an occasional Spark `OPTIMIZE <table> VORDER` on gold if Direct Lake speed matters.
+**Maintenance.** Each notebook ends with a maintenance cell (`RUN_MAINTENANCE = True`) that compacts and vacuums its tables (7-day retention); on a PC, `medallion maintain <layer>` does the same. delta-rs can't write V-Order; run an occasional Spark `OPTIMIZE <table> VORDER` on gold if Direct Lake speed matters.
 
 ---
 
@@ -387,5 +389,94 @@ A bronze file is never split in silver, so a file over ~50M rows needs a bigger 
 | `business key not unique in the SQL result` | SQL returns several rows per key | Fix joins or the key |
 | `SQL columns differ from gold.<table>` | Fact columns changed, or a dimension column removed | Facts: `FULL_RELOAD`; dimensions: see Reloads |
 | Session restarts / out of memory | Unit of work too large | Lower `BATCH_ROWS` / `STREAM_THRESHOLD_MB`, or add vCores |
+
+
+---
+
+## Running on your PC
+
+The notebooks' code lives in `src/medallion/` as a Python package, and the `medallion` command runs it on your own machine. Today it reads and writes **local folders** laid out exactly like the Fabric Lakehouses (`<name>.Lakehouse/Files` and `/Tables/dbo`); running locally against OneLake is the next step.
+
+```mermaid
+flowchart LR
+    E["src/medallion<br/>(one copy of the engine)"]
+    E -->|"scripts/build_notebooks.py<br/>copies it into"| N["notebooks/*.ipynb<br/>Fabric, OneLake"]
+    E -->|"pip install -e ."| C["medallion command<br/>your PC, local folders"]
+    E --> T["tests/<br/>both ways"]
+```
+
+**Set up** (Windows PowerShell; the same on macOS or Linux with `source .venv/bin/activate`):
+
+```powershell
+cd C:\repos\fabric-polars-medallion\fabric-polars-medallion
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e .
+medallion init C:\lakehouses --data sample
+```
+
+`init` creates `ls_raw.Lakehouse`, `ls_cleansed.Lakehouse` and `ls_gold.Lakehouse` under the folder, copies `config/` into them (as the deploy script does for OneLake), and writes `medallion.json` with the Lakehouse names (`--raw`, `--silver`, `--gold` to change them). `--data sample` also copies the clean test CSVs into landing.
+
+**Run:**
+
+```powershell
+cd C:\lakehouses                         # or pass --root C:\lakehouses, or set MEDALLION_ROOT
+medallion run all                         # bronze, then silver, then gold; stops at the first failure
+medallion run silver --dry-run
+medallion run gold --tables fact_orders --full-reload
+medallion run bronze --folder incoming/acme/orders --table acme_orders_raw
+medallion run silver --set BATCH_ROWS=2000000
+medallion deploy --data dirty --no-config # drop the messy test files into landing
+medallion log silver -n 10                # recent runs; --table silver_rejects for rejects
+medallion params gold                     # every parameter, default and meaning
+```
+
+| Option | Notebook parameter |
+| --- | --- |
+| `--dry-run` | `DRY_RUN = True` |
+| `--full-reload` | `FULL_RELOAD = True` (silver, gold) |
+| `--tables` | `TABLES` (silver: bronze table names; gold: gold table names) |
+| `--feeds`, `--folder`, `--table` | `FEED_FILTER`, `FOLDER`, `TABLE` (bronze) |
+| `--set NAME=VALUE` | any parameter; `--set gold.TABLES=dim_date` for one layer with `run all` |
+| `--json` | print the notebook exit value(s) instead of tables |
+
+Lakehouse and workspace parameters come from `medallion.json`. The exit code is 0 on success, 1 if a feed or table failed, and 2 for a configuration error. Tables written locally are ordinary Delta tables: open them with Polars (`pl.read_delta("C:/lakehouses/ls_gold.Lakehouse/Tables/dbo/fact_orders")`), DuckDB's `delta_scan`, or Power BI Desktop's Delta Lake connector.
+
+After editing a schema file, the rules or a SQL file in `config/`, run `medallion deploy` to copy it into the local Lakehouses again (and `scripts/deploy_to_onelake.py` for Fabric).
+
+**From Python**, call a layer directly:
+
+```python
+from medallion import LocalStorage
+from medallion.silver import SilverParams, SilverRun
+
+result = SilverRun(SilverParams(TABLES="customers_raw", DRY_RUN=True), LocalStorage("C:/lakehouses")).run()
+result.summary          # the table the notebook shows
+result.problems         # [] when everything worked
+```
+
+## Changing the engine
+
+`src/medallion/` is the only copy of the code:
+
+| Module | Contains |
+| --- | --- |
+| `common.py` | Shared helpers: streaming collect, write options, merge options, parameters and run results |
+| `storage.py` | `FabricStorage` (OneLake from a notebook, via `notebookutils`) and `LocalStorage` (local folders) |
+| `bronze.py` | `BronzeParams`, schema files, `BronzeRun` |
+| `silver.py` | `SilverParams`, the rules, `SilverRun` |
+| `gold.py` | `GoldParams`, SQL files, SCD logic, `GoldRun` |
+| `deploy.py`, `cli.py` | Copying config into Lakehouses; the `medallion` command |
+
+The notebooks are **generated**: `python scripts/build_notebooks.py` copies `common.py`, `storage.py` and the layer's module into each notebook's code cells, and writes the parameters cell from the layer's `Params` class, so a new parameter is added in one place. The markdown and the order of cells come from `scripts/notebook_templates/`. The notebooks stay self-contained, so Fabric needs nothing installed beyond Polars, deltalake and DuckDB.
+
+Edit the engine in `src/`, regenerate, run the tests, then commit the code and notebooks together; CI fails if the notebooks are out of date. If someone edits a notebook's engine cells in Fabric, copy the change back into `src/` before regenerating, or it will be overwritten.
+
+```bash
+python scripts/build_notebooks.py
+python -m pytest
+```
+
+The tests run every end-to-end check twice: through the generated notebooks (with a stand-in for `notebookutils`) and through the engine directly, as the command runs it.
 
 Sources: [Use Python experience on Notebook](https://learn.microsoft.com/en-us/fabric/data-engineering/using-python-experience-on-notebook) · [NotebookUtils notebook run](https://learn.microsoft.com/fabric/data-engineering/notebookutils/notebookutils-notebook-run) · [Notebook source control and deployment](https://learn.microsoft.com/en-us/fabric/data-engineering/notebook-source-control-deployment) · [endjin: Polars Workloads on Microsoft Fabric](https://endjin.com/blog/polars-workloads-on-microsoft-fabric) · [DuckDB: Delta Grows Up](https://duckdb.org/2026/05/07/delta-uc-updates)
